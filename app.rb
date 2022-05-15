@@ -7,12 +7,11 @@ DB.logger = Logger.new(STDOUT)
 
 configure do
   DB.create_table?(:pics) { primary_key :id; String :pic; Int :score }
-  Dir["public/*.jpg"].each do |pic|
-    name = pic.gsub('public/', '')
-    DB[:pics].insert(pic: name, score: 1) if DB[:pics].where(pic: name).count == 0
+  Dir.children("public").each do |name|
+    DB[:pics].insert(pic: name, score: 1) unless DB[:pics].where(pic: name).any?
   end
   DB[:pics].each do |pic|
-    DB[:pics].exclude(pic: pic[:pic]) if Dir["public/#{pic[:pic]}"].count == 0
+    DB[:pics].where(pic: pic[:pic]).delete if !Dir["public/#{pic[:pic]}"].any?
   end
 end
 
@@ -21,8 +20,8 @@ def score(a, b, result)
 end
 
 get '/' do
-  @pics = DB.fetch("select a.rowid, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score_b from pics a order by random() limit 2").to_a
-  @rank = DB.fetch("select a.id, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score_b from pics a order by a.score desc limit 10").to_a
+  @pics = DB.fetch("select a.id, a.pic, a.score, (select count(1) + 1 from pics b where b.score > a.score) as rank from pics a order by random() limit 2").to_a
+  @rank = DB.fetch("select a.id, a.pic, a.score, (select count(1) + 1 from pics b where b.score > a.score) as rank from pics a order by a.score desc limit 10").to_a
   erb :index
 end
 
@@ -77,12 +76,12 @@ __END__
         <img class="big" src="/<%= @pics.last[:pic] %>">
       </a>
       <br>
-      #<%= @pics.first[:score_b] %> place vs #<%= @pics.last[:score_b] %> place
+      #<%= @pics.first[:rank] %> place vs #<%= @pics.last[:rank] %> place
       <br><br><br>
       <% @rank.each do |board| %>
         <div style="float: left">
           <a href="/<%= board[:id] %>" target="_blank"><img src="/<%= board[:pic] %>" style="width: 200px"></a><br>
-          #<%= board[:id] %> (score: <%= board[:score_b] %>)
+          #<%= board[:rank] %> (score: <%= board[:score] %>)
         </div>
       <% end %>
       <div style="clear: both"></div>
