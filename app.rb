@@ -1,7 +1,9 @@
 require 'sinatra'
 require 'sequel'
+require 'logger'
 
 DB = Sequel.sqlite("app.db")
+DB.logger = Logger.new(STDOUT)
 
 configure do
   DB.create_table?(:pics) { primary_key :id; String :pic; Int :score }
@@ -19,16 +21,16 @@ def score(a, b, result)
 end
 
 get '/' do
-  @pics = DB.fetch("select a.rowid, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score from pics a order by random() limit 2").to_a
-  @rank = DB.fetch("select a.id, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score from pics a order by a.score desc limit 10").to_a
+  @pics = DB.fetch("select a.rowid, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score_b from pics a order by random() limit 2").to_a
+  @rank = DB.fetch("select a.id, a.pic, (select count(1) + 1 from pics b where b.score > a.score) as score_b from pics a order by a.score desc limit 10").to_a
   erb :index
 end
 
 get '/vote/:a/:b' do |a, b|
-  score_a = DB.fetch('select score from pics where rowid = ?', a).to_a[0][:score]
-  score_b = DB.fetch('select score from pics where rowid = ?', b).to_a[0][:score]
-  DB.fetch('update pics set score = ? where rowid = ?', score(score_a, score_b, 2), a)
-  DB.fetch('update pics set score = ? where rowid = ?', score(score_b, score_a, -2), b)
+  score_a = DB[:pics].where(id: a).first[:score]
+  score_b = DB[:pics].where(id: b).first[:score]
+  DB[:pics].where(id: a).update(score: score(score_a, score_b, 2))
+  DB[:pics].where(id: b).update(score: score(score_b, score_a, -2))
 
   redirect '/'
 end
@@ -47,41 +49,25 @@ __END__
         padding: 0;
         text-align: center;
       }
-      a {
-        text-decoration: none;
-        color: darkblue;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-      img.big {
-        max-height: 450px;
-        max-width: 40%;
-      }
       #header {
         background-color: #8C1B08;
         color: #fff;
         padding: 5px;
+        margin-bottom: 8px;
       }
       #header a{
         color: #fff;
         text-decoration: none;
       }
-      #main table {
-        margin: 0 auto;
-      }
-      #footer {
-        font: 12px Tahoma;
-        margin: 25px 0 50px 0;
-      }
-      #footer a {
-        margin-right: 10px;
+      img.big {
+        max-width: 450px;
+        max-width: 40%;
       }
     </style>
   </head>
   <body>
-    <div id="headr">
-      <h1><a href="index.html">Picture Battle</a></h1>
+    <div id="header">
+      <h1><a href="/">Picture Battle</a></h1>
     </div>
     <div id="main">
       <a href="/vote/<%= @pics.first[:id] %>/<%= @pics.last[:id] %>">
@@ -91,29 +77,23 @@ __END__
         <img class="big" src="/<%= @pics.last[:pic] %>">
       </a>
       <br>
-      #<%= @pics.first[:score] %> place vs #<%= @pics.last[:score] %> place
-      <script>
-        document.onkeydown = function(e) {
-          e = e || window.event;
-          if (e.keyCode == '37') {
-            window.location.href = '/vote/<%= @pics.first[:id] %>/<%= @pics.last[:id] %>';
-          }
-          else if (e.keyCode == '39') {
-            window.location.href = '/vote/<%= @pics.last[:id] %>/<%= @pics.first[:id] %>';
-          }
-        }
-      </script>
+      #<%= @pics.first[:score_b] %> place vs #<%= @pics.last[:score_b] %> place
       <br><br><br>
       <% @rank.each do |board| %>
         <div style="float: left">
           <a href="/<%= board[:id] %>" target="_blank"><img src="/<%= board[:pic] %>" style="width: 200px"></a><br>
-          #<%= board[:id] %> (score: <%= board[:score] %>)
+          #<%= board[:id] %> (score: <%= board[:score_b] %>)
         </div>
       <% end %>
       <div style="clear: both"></div>
-    
     </div>
-    <div id="footer">
-    </div>
+    <script>
+      document.onkeydown = function(e) {
+        if (e.keyCode == '37')
+          location.href = '/vote/<%= @pics.first[:id] %>/<%= @pics.last[:id] %>';
+        else if (e.keyCode == '39')
+          location.href = '/vote/<%= @pics.last[:id] %>/<%= @pics.first[:id] %>';
+      }
+    </script>
   </body>
 </html>
